@@ -14,15 +14,14 @@ A lightweight, zero-dependency library that creates a deeply observable Proxy wi
 ## 🚀 Installation
 
 ```bash
-npm install dx-object
+npm install dx-object-js
 ```
-
 ---
 
 ## ⚡ Quick Start
 
 ```javascript
-import { DXObject } from 'dx-object';
+import { DXObject } from 'dx-object-js';
 
 const data = DXObject({}, {
   onMutation: (path, value) => {
