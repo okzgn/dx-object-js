@@ -1,0 +1,47 @@
+{
+  "name": "dx-object",
+  "version": "4.0.0",
+  "description": "A deeply observable Proxy with safe auto-vivification. Accessing missing paths returns 'Ghost' proxies that materialize upon assignment. Features comprehensive mutation, deletion, and undefined-access tracking via configurable callbacks (onMutation, onUndefined, onError).",
+  "type": "module",
+  "main": "index.js",
+  "types": "./index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./index.js",
+      "types": "./index.d.ts",
+      "default": "./index.js"
+    }
+  },
+  "files": [
+    "index.js",
+    "index.d.ts"
+  ],
+  "keywords": [
+    "DX",
+    "Developer",
+    "Experience",
+    "State",
+    "State-management",
+    "Data",
+    "Data-management",
+    "Reactive",
+    "Reactive-state",
+    "Auto-vivification",
+    "Lightweight",
+    "Zero-dependency",
+    "Dependency-free"
+  ],
+  "engines": {
+    "node": ">=16.0.0"
+  },
+  "license": "MIT",
+  "author": "OKZGN",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/okzgn/dx-object-js.git"
+  },
+  "bugs": {
+    "url": "https://github.com/okzgn/dx-object-js/issues"
+  },
+  "homepage": "https://github.com/okzgn/dx-object-js#readme"
+}
