@@ -9,6 +9,8 @@
  */
 
 // ─── Type definitions ────────────────────────────────────────────────────────
+
+// ─── Payload types ───────────────────────────────────────────────────────────
  
 /**
  * Metadata object emitted by `onMutation` when an Array mutator method is
@@ -39,7 +41,9 @@
  * // delete form.field emits:
  * { property: 'field', value: 123 }
  */
- 
+
+// ─── Callback types ──────────────────────────────────────────────────────────
+
 /**
  * Callback invoked after every successful mutation on the proxied target.
  *
@@ -95,15 +99,15 @@
  *   mutation. Omit to use DXObject purely for auto-vivification without
  *   observation.
  * @property {OnUndefinedCallback} [onUndefined] - Called every time a property 
- * that doesn't exist is accessed. If this function returns a value other than 
- * undefined, that value will be returned instead of creating a Ghost Proxy.
+ *   that doesn't exist is accessed. If this function returns a value other than 
+ *   undefined, that value will be returned instead of creating a Ghost Proxy.
  * @property {OnErrorCallback}    [onError]    - Called when DXObject blocks a
  *   dangerous operation (Prototype Pollution, depth overflow, etc.). Defaults
  *   to `console.error`.
  * @property {string[]}           [arrayMutators=[]]   Additional array method names to
-*   intercept alongside the built-in mutators (`push`, `pop`, `shift`,
-*   `unshift`, `splice`, `sort`, `reverse`). Useful for custom subclasses or
-*   polyfilled methods that mutate in-place without triggering the `set` trap.
+*    intercept alongside the built-in mutators (`push`, `pop`, `shift`,
+*    `unshift`, `splice`, `sort`, `reverse`). Useful for custom subclasses or
+*    polyfilled methods that mutate in-place without triggering the `set` trap.
  * @property {number}             [depth=10]   - Maximum ghost-chain depth
  *   before writes are silently blocked and `onError` is called. Clamped to
  *   `[1, 100]`. Useful for preventing runaway paths from untrusted data.
@@ -232,8 +236,8 @@ export function DXObject(target = {}, options) {
      * @param {Object}   root  - The raw (unwrapped) root target.
      * @param {string[]} path  - Full path to the property to assign.
      * @param {any}      value - Value to assign at the final key.
-     * @returns {Object} The parent object of the final key, or the deepest
-     *   object reached when an error occurred.
+     * @returns {Object|undefined} The direct parent of the assigned key,
+     *   or `undefined` if the write was blocked by a safety guard.
      */
     const materializePath = (root, path, value) => {
         // Should never happen in normal usage; guard against direct misuse.
@@ -358,13 +362,14 @@ export function DXObject(target = {}, options) {
      * Once `path.length` reaches `maxDepth`, returns a terminal ghost instead.
      *
      * @param {string[]} path - Accumulated key path from the root.
+     * @param {Function} [onMaterialize] - Notifies to the upper proxy that cached ghost need cleanup.
      * @returns {Proxy}
      */
-    const makeGhost = (path) => {
+    const makeGhost = (path, onMaterialize) => {
         if (path.length >= maxDepth) return createTerminalGhost(path);
  
         return new Proxy({}, {
-            get: createBaseGhostGetter((propStr) => makeGhost([...path, propStr])),
+            get: createBaseGhostGetter((propStr) => makeGhost([...path, propStr], onMaterialize)),
  
             set(_t, prop, value) {
                 const propStr = String(prop);
@@ -379,7 +384,10 @@ export function DXObject(target = {}, options) {
                     // never throws, so this try/catch only covers exceptions
                     // that may originate inside onMutation (consumer code).
                     const parentObj = materializePath(target, fullPath, value);
-                    if (parentObj && onMutation) onMutation(fullPath, value, parentObj, target);
+                    if (parentObj) {
+                        if (onMaterialize) onMaterialize();
+                        if (onMutation) onMutation(fullPath, value, parentObj, target);
+                    }
                     return parentObj ? true : false;
                 } catch (err) {
                     onError('onMutation threw an unhandled exception', { err, fullPath, value });
@@ -416,6 +424,8 @@ export function DXObject(target = {}, options) {
     const createRealProxy = (obj, currentPath) => {
         if (proxyCache.has(obj)) return proxyCache.get(obj);
  
+        const localGhostCache = new Map();
+
         const proxy = new Proxy(obj, {
             get(t, prop, receiver) {
                 const propStr = String(prop);
@@ -428,13 +438,13 @@ export function DXObject(target = {}, options) {
  
                 if (typeof val === 'function') {
                     // Intercept in-place array mutators to emit a structured payload.
-                    if (arrayMutators.has(String(prop)) && (Array.isArray(t) || (extraArrayMutators.includes(propStr) && typeof t[propStr] === 'function'))) {
+                    if (arrayMutators.has(propStr) && (Array.isArray(t) || (extraArrayMutators.includes(propStr) && typeof t[propStr] === 'function'))) {
                         return (...args) => {
                             const result = val.apply(t, args);
  
                             if (onMutation) {
                                 /** @type {ArrayMutationPayload} */
-                                const payload = { method: String(prop), args, result };
+                                const payload = { method: propStr, args, result };
                                 onMutation(currentPath, payload, receiver, target);
                             }
  
@@ -458,19 +468,24 @@ export function DXObject(target = {}, options) {
  
                     // Recursively wrap nested objects.
                     if (typeof val === 'object') {
-                        return createRealProxy(val, [...currentPath, String(prop)]);
+                        return createRealProxy(val, [...currentPath, propStr]);
                     }
  
                     return val;
                 }
  
-                if(onUndefined){
-                    const onUndefinedResult = onUndefined([...currentPath, String(prop)], receiver, target);
-                    if(onUndefinedResult !== undefined){ return onUndefinedResult; }
+                if (onUndefined) {
+                    const onUndefinedResult = onUndefined([...currentPath, propStr], receiver, target);
+                    if(onUndefinedResult !== undefined) return onUndefinedResult;
                 }
 
-                // Property does not exist yet — return a ghost to allow lazy writes.
-                return makeGhost([...currentPath, String(prop)]);
+                // Property does not exist yet — return a stable cached ghost.
+                // Caching ensures the same reference is returned on every read,
+                // preventing false change-detection cycles in frameworks like Angular.
+                if (localGhostCache.has(propStr)) return localGhostCache.get(propStr);
+                const ghost = makeGhost([...currentPath, propStr], () => localGhostCache.delete(propStr));
+                localGhostCache.set(propStr, ghost);
+                return ghost;
             },
  
             set(t, prop, value, receiver) {
@@ -478,6 +493,10 @@ export function DXObject(target = {}, options) {
  
                 // Block prototype-chain poisoning on real objects too.
                 if (isDangerousKey(propStr)) return false;
+
+                // Invalidate the cached ghost for this key — the property now exists
+                // as a real value, so future reads must return the real proxy, not a ghost.
+                localGhostCache.delete(propStr);
  
                 // Reflect.set with `receiver` correctly handles inherited
                 // setters defined via Object.defineProperty.
@@ -494,8 +513,9 @@ export function DXObject(target = {}, options) {
                 const propStr = String(prop);
                 const value = Reflect.get(t, prop);
                 const success = Reflect.deleteProperty(t, prop);
-                if (success && typeof prop !== 'symbol' && onMutation) {
-                    onMutation([...currentPath, propStr], { property: propStr, value }, proxy, target);
+                if (success && typeof prop !== 'symbol') {
+                    localGhostCache.delete(propStr);
+                    if(onMutation) onMutation([...currentPath, propStr], { property: propStr, value }, proxy, target);
                 }
                 return success;
             },

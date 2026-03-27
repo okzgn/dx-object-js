@@ -1,6 +1,6 @@
 {
   "name": "dx-object-js",
-  "version": "4.0.0",
+  "version": "4.1.0",
   "description": "A deeply observable Proxy with safe auto-vivification. Accessing missing paths returns 'Ghost' proxies that materialize upon assignment. Features comprehensive mutation, deletion, and undefined-access tracking via configurable callbacks (onMutation, onUndefined, onError).",
   "type": "module",
   "main": "index.js",
