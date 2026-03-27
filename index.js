@@ -515,7 +515,7 @@ export function DXObject(target = {}, options) {
                 const success = Reflect.deleteProperty(t, prop);
                 if (success && typeof prop !== 'symbol') {
                     localGhostCache.delete(propStr);
-                    if(onMutation) onMutation([...currentPath, propStr], { property: propStr, value }, proxy, target);
+                    if (onMutation) onMutation([...currentPath, propStr], { property: propStr, value }, proxy, target);
                 }
                 return success;
             },
