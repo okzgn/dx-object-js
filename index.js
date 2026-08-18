@@ -186,9 +186,9 @@ export function DXObject(target = {}, options) {
         ? 10
         : Math.max(1, Math.min(100, Number(options.depth)));
  
-    const onUndefined = options.onUndefined;
+    const onUndefined = typeof options.onUndefined === 'function' ? options.onUndefined : null;
 
-    const onMutation = options.onMutation;
+    const onMutation = typeof options.onMutation === 'function' ? options.onMutation : null;
  
     /** @type {OnErrorCallback} */
     const onError = typeof options.onError === 'function'
@@ -369,8 +369,15 @@ export function DXObject(target = {}, options) {
     const makeGhost = (path, onMaterialize) => {
         if (path.length >= maxDepth) return createTerminalGhost(path);
  
-        return new Proxy({}, {
-            get: createBaseGhostGetter((propStr) => makeGhost([...path, propStr], onMaterialize)),
+        let ghostProxy = new Proxy({}, {
+            get: createBaseGhostGetter((propStr) => {
+                const nextPath = [...path, propStr];
+                if (onUndefined) {
+                    const res = onUndefined(nextPath, ghostProxy, target);
+                    if (res !== undefined) return res;
+                }
+                return makeGhost(nextPath, onMaterialize);
+            }),
  
             set(_t, prop, value) {
                 const propStr = String(prop);
@@ -404,6 +411,8 @@ export function DXObject(target = {}, options) {
                 return undefined;
             },
         });
+     
+        return ghostProxy;
     };
  
     // ── Real object proxy ─────────────────────────────────────────────────────
