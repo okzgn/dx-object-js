@@ -180,6 +180,7 @@ export function DXObject(target = {}, options) {
     options = options && typeof options === 'object' ? options : {};
  
     const extraArrayMutators = Array.isArray(options.arrayMutators) ? options.arrayMutators : [];
+    const extraMutatorsSet = new Set(extraArrayMutators);
     
     const maxDepth = isNaN(options.depth)
         ? 10
@@ -438,7 +439,7 @@ export function DXObject(target = {}, options) {
  
                 if (typeof val === 'function') {
                     // Intercept in-place array mutators to emit a structured payload.
-                    if (arrayMutators.has(propStr) && (Array.isArray(t) || (extraArrayMutators.includes(propStr) && typeof t[propStr] === 'function'))) {
+                    if (arrayMutators.has(propStr) && (Array.isArray(t) || (extraMutatorsSet.has(propStr) && typeof t[propStr] === 'function'))) {
                         return (...args) => {
                             const result = val.apply(t, args);
  
